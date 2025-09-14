@@ -1,11 +1,88 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, Grid3X3, List, LayoutGrid } from 'lucide-react';
 import PromptImageGallery from '../components/PromptImageGallery';
-import { promptsData } from '../data/promptsData';
+import { usePrompts } from '../hooks/usePrompts';
+import { useCategories } from '../hooks/useCategories';
+
+// Custom hook for debounced search
+const useDebounce = (value: string, delay: number) => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+};
 
 const ExplorePage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [hasInitialized, setHasInitialized] = useState(false);
+  
+  // Debounce search query to prevent excessive API calls
+  const debouncedSearchQuery = useDebounce(searchQuery, 500); // 500ms delay
+  
+  // Use dynamic hooks
+  const { prompts, loading, totalCount, fetchPrompts } = usePrompts();
+  const { categories } = useCategories();
+
+  // Memoize fetch parameters to prevent unnecessary re-computations
+  const fetchParams = useMemo(() => {
+    const params: any = { limit: 50 };
+    
+    if (activeTab === 'trending') {
+      params.sortBy = 'views';
+      params.sortOrder = 'desc';
+    } else if (activeTab === 'favorites') {
+      params.featured = true;
+    }
+    
+    if (debouncedSearchQuery) {
+      params.search = debouncedSearchQuery;
+    }
+    
+    return params;
+  }, [activeTab, debouncedSearchQuery]);
+
+  // Stable fetch function to prevent useEffect from re-running
+  const stableFetchPrompts = useCallback(() => {
+    fetchPrompts(fetchParams);
+  }, [fetchPrompts, fetchParams]);
+
+  // Fetch prompts when filters change (only after initial load)
+  useEffect(() => {
+    if (hasInitialized) {
+      console.log('🔄 ExplorePage: Filter change detected, fetching with params:', fetchParams);
+      stableFetchPrompts();
+    }
+  }, [stableFetchPrompts, hasInitialized]);
+
+  // Handle initial load to prevent double API calls
+  useEffect(() => {
+    if (!hasInitialized) {
+      // Only fetch if prompts array is empty (hook hasn't loaded yet)
+      if (prompts.length === 0 && !loading) {
+        console.log('🚀 ExplorePage: Initial fetch triggered');
+        stableFetchPrompts();
+      } else if (prompts.length > 0) {
+        console.log('📊 ExplorePage: Prompts already loaded, skipping initial fetch');
+      }
+      setHasInitialized(true);
+    }
+  }, [prompts.length, loading, hasInitialized, stableFetchPrompts]);
+
+  // Calculate filtered count for display
+  const getFilteredCount = () => {
+    if (loading) return 0;
+    return prompts.length;
+  };
 
   const tabs = [
     { id: 'all', label: 'All' },
@@ -24,7 +101,7 @@ const ExplorePage: React.FC = () => {
               Explore Prompts
             </h1>
             <p className="text-gray-600">
-              {promptsData.length} AI prompts to inspire your creativity
+              {loading ? 'Loading...' : `${totalCount} AI prompts to inspire your creativity`}
             </p>
           </div>
 
@@ -60,18 +137,19 @@ const ExplorePage: React.FC = () => {
             
             {/* Results count */}
             <div className="text-sm text-gray-500">
-              {promptsData.filter(p => {
-                if (activeTab === 'trending') return p.popularity > 85;
-                if (activeTab === 'favorites') return p.popularity > 90;
-                return true;
-              }).length} results
+              {loading ? 'Loading...' : `${getFilteredCount()} results`}
             </div>
           </div>
         </div>
       </div>
 
       {/* Gallery */}
-      <PromptImageGallery activeTab={activeTab} searchQuery={searchQuery} />
+      <PromptImageGallery 
+        activeTab={activeTab} 
+        searchQuery={searchQuery} 
+        prompts={prompts}
+        loading={loading}
+      />
     </div>
   );
 };

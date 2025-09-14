@@ -1,18 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { Grid, List, LayoutGrid, Search } from 'lucide-react';
-import { promptsData, Prompt } from '../data/promptsData';
+import { Prompt } from '../hooks/usePrompts';
 import PromptImageCard from './PromptImageCard';
+import { usePrompts } from '../hooks/usePrompts';
 
 interface PromptImageGalleryProps {
   activeTab?: string;
   searchQuery?: string;
+  prompts: Prompt[];
+  loading?: boolean;
 }
 
-const PromptImageGallery: React.FC<PromptImageGalleryProps> = ({ activeTab = 'all', searchQuery = '' }) => {
-  const [prompts] = useState(promptsData);
-  const [filteredPrompts, setFilteredPrompts] = useState(promptsData);
+const PromptImageGallery: React.FC<PromptImageGalleryProps> = ({ 
+  activeTab = 'all', 
+  searchQuery = '', 
+  prompts = [],
+  loading = false 
+}) => {
+  const [filteredPrompts, setFilteredPrompts] = useState<Prompt[]>([]);
   const [viewMode, setViewMode] = useState<'masonry' | 'grid' | 'list'>('masonry');
-  const [isLoading, setIsLoading] = useState(false);
 
   // Masonry grid column management - moved to component level
   const getColumnCount = () => {
@@ -45,38 +51,22 @@ const PromptImageGallery: React.FC<PromptImageGalleryProps> = ({ activeTab = 'al
     };
   }, []);
 
-  // Filter prompts based on active tab and search query
+  // Filter prompts based on search query (other filtering done via API)
   useEffect(() => {
-    setIsLoading(true);
-    setTimeout(() => {
-      let filtered = prompts;
-      
-      // Filter by active tab
-      switch (activeTab) {
-        case 'trending':
-          filtered = prompts.filter(p => p.popularity > 85).sort((a, b) => b.popularity - a.popularity);
-          break;
-        case 'favorites':
-          filtered = prompts.filter(p => p.popularity > 90);
-          break;
-        default:
-          filtered = prompts;
-      }
-      
-      // Filter by search query
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        filtered = filtered.filter(prompt =>
-          prompt.title.toLowerCase().includes(query) ||
-          prompt.prompt.toLowerCase().includes(query) ||
-          prompt.tags.some(tag => tag.toLowerCase().includes(query))
-        );
-      }
-      
-      setFilteredPrompts(filtered);
-      setIsLoading(false);
-    }, 200);
-  }, [activeTab, searchQuery, prompts]);
+    let filtered = prompts;
+    
+    // Client-side search filtering if needed
+    if (searchQuery && !loading) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(prompt =>
+        prompt.title.toLowerCase().includes(query) ||
+        prompt.description.toLowerCase().includes(query) ||
+        prompt.tags.some(tag => tag.toLowerCase().includes(query))
+      );
+    }
+    
+    setFilteredPrompts(filtered);
+  }, [prompts, searchQuery, loading]);
 
   // Distribute items across columns - moved to component level
   const distributeItems = React.useMemo(() => {
@@ -90,21 +80,16 @@ const PromptImageGallery: React.FC<PromptImageGalleryProps> = ({ activeTab = 'al
       // Add item to shortest column
       columns[shortestColumnIndex].push(prompt);
       
-      // More accurate height estimation based on content
+      // Default height estimation (no isPortrait available in API)
       let estimatedHeight = 1;
-      if (prompt.isPortrait) {
-        estimatedHeight = 1.6;
-      } else {
-        estimatedHeight = 0.8;
-      }
       
       // Add extra height for prompts with longer text
-      if (prompt.prompt.length > 100) {
+      if (prompt.description.length > 100) {
         estimatedHeight += 0.2;
       }
       
-      // Popular items get slight bonus to balance visual weight
-      if (prompt.popularity > 90) {
+      // Featured items get slight bonus to balance visual weight
+      if (prompt.featured) {
         estimatedHeight += 0.1;
       }
       
@@ -134,7 +119,7 @@ const PromptImageGallery: React.FC<PromptImageGalleryProps> = ({ activeTab = 'al
           <div key={`col-${colIndex}`} className="flex flex-col gap-4">
             {columnItems.map((prompt, index) => (
               <PromptImageCard
-                key={prompt.id}
+                key={prompt._id}
                 prompt={prompt}
                 index={index}
                 viewMode={viewMode}
@@ -150,7 +135,7 @@ const PromptImageGallery: React.FC<PromptImageGalleryProps> = ({ activeTab = 'al
     <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {filteredPrompts.map((prompt, index) => (
         <PromptImageCard
-          key={prompt.id}
+          key={prompt._id}
           prompt={prompt}
           index={index}
           viewMode={viewMode}
@@ -163,7 +148,7 @@ const PromptImageGallery: React.FC<PromptImageGalleryProps> = ({ activeTab = 'al
     <div className="space-y-4">
       {filteredPrompts.map((prompt, index) => (
         <PromptImageCard
-          key={prompt.id}
+          key={prompt._id}
           prompt={prompt}
           index={index}
           viewMode={viewMode}
@@ -204,7 +189,7 @@ const PromptImageGallery: React.FC<PromptImageGalleryProps> = ({ activeTab = 'al
       </div>
       
       {/* Loading State */}
-      {isLoading && (
+      {loading && (
         <div className="max-w-6xl mx-auto">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -215,7 +200,7 @@ const PromptImageGallery: React.FC<PromptImageGalleryProps> = ({ activeTab = 'al
       )}
       
       {/* Gallery Content */}
-      {!isLoading && (
+      {!loading && (
         <div className="max-w-6xl mx-auto">
           {viewMode === 'masonry' && renderMasonryGrid()}
           {viewMode === 'grid' && renderRegularGrid()}
@@ -224,7 +209,7 @@ const PromptImageGallery: React.FC<PromptImageGalleryProps> = ({ activeTab = 'al
       )}
 
       {/* No Results */}
-      {!isLoading && filteredPrompts.length === 0 && (
+      {!loading && filteredPrompts.length === 0 && (
         <div className="text-center py-16 max-w-6xl mx-auto">
           <div className="text-gray-400 mb-4">
             <Search className="w-12 h-12 mx-auto" />

@@ -1,29 +1,34 @@
 import React, { useState } from 'react';
-import { Plus, Edit3, Trash2, Save, X, Tag } from 'lucide-react';
+import { Plus, Edit3, Trash2, Save, X, Tag, AlertCircle, Loader2 } from 'lucide-react';
+import { useAdminCategories } from '../../hooks/useAdminCategories';
 
 interface Category {
-  id: number;
+  _id: string;
   name: string;
   description?: string;
   color?: string;
   promptCount: number;
+  isActive: boolean;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface CategoryManagementProps {
-  // Future props for category CRUD operations
+  // Props for category CRUD operations
 }
 
 const CategoryManagement: React.FC<CategoryManagementProps> = () => {
-  // Initial categories with some mock data
-  const [categories, setCategories] = useState<Category[]>([
-    { id: 1, name: 'Portrait', description: 'Human and character portraits', color: '#3B82F6', promptCount: 15 },
-    { id: 2, name: 'Landscape', description: 'Natural and urban landscapes', color: '#10B981', promptCount: 12 },
-    { id: 3, name: 'Abstract', description: 'Abstract and artistic creations', color: '#8B5CF6', promptCount: 8 },
-    { id: 4, name: 'Animals', description: 'Wildlife and pet photography', color: '#F59E0B', promptCount: 10 },
-    { id: 5, name: 'Architecture', description: 'Buildings and structures', color: '#EF4444', promptCount: 6 },
-    { id: 6, name: 'Vintage', description: 'Retro and vintage styles', color: '#84CC16', promptCount: 4 },
-    { id: 7, name: 'Sci-Fi', description: 'Science fiction and futuristic', color: '#06B6D4', promptCount: 7 }
-  ]);
+  // Use the custom hook for category management
+  const {
+    categories,
+    loading,
+    error,
+    createCategory,
+    updateCategory,
+    deleteCategory,
+    clearError
+  } = useAdminCategories();
 
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -38,18 +43,19 @@ const CategoryManagement: React.FC<CategoryManagementProps> = () => {
     '#84CC16', '#06B6D4', '#EC4899', '#F97316', '#6366F1'
   ];
 
-  const handleAddCategory = () => {
+  const handleAddCategory = async () => {
     if (newCategory.name.trim()) {
-      const category: Category = {
-        id: Date.now(),
+      const success = await createCategory({
         name: newCategory.name.trim(),
-        description: newCategory.description.trim(),
+        description: newCategory.description.trim() || undefined,
         color: newCategory.color,
-        promptCount: 0
-      };
-      setCategories(prev => [...prev, category]);
-      setNewCategory({ name: '', description: '', color: '#3B82F6' });
-      setIsAddingCategory(false);
+        order: categories.length
+      });
+      
+      if (success) {
+        setNewCategory({ name: '', description: '', color: '#3B82F6' });
+        setIsAddingCategory(false);
+      }
     }
   };
 
@@ -62,21 +68,24 @@ const CategoryManagement: React.FC<CategoryManagementProps> = () => {
     });
   };
 
-  const handleUpdateCategory = () => {
+  const handleUpdateCategory = async () => {
     if (editingCategory && newCategory.name.trim()) {
-      setCategories(prev => prev.map(cat => 
-        cat.id === editingCategory.id 
-          ? { ...cat, name: newCategory.name.trim(), description: newCategory.description.trim(), color: newCategory.color }
-          : cat
-      ));
-      setEditingCategory(null);
-      setNewCategory({ name: '', description: '', color: '#3B82F6' });
+      const success = await updateCategory(editingCategory._id, {
+        name: newCategory.name.trim(),
+        description: newCategory.description.trim() || undefined,
+        color: newCategory.color
+      });
+      
+      if (success) {
+        setEditingCategory(null);
+        setNewCategory({ name: '', description: '', color: '#3B82F6' });
+      }
     }
   };
 
-  const handleDeleteCategory = (id: number) => {
+  const handleDeleteCategory = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this category? This action cannot be undone.')) {
-      setCategories(prev => prev.filter(cat => cat.id !== id));
+      await deleteCategory(id);
     }
   };
 
@@ -103,7 +112,8 @@ const CategoryManagement: React.FC<CategoryManagementProps> = () => {
             </div>
             <button
               onClick={() => setIsAddingCategory(true)}
-              className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl font-medium hover:bg-gray-800 transition-colors"
+              disabled={loading || isAddingCategory}
+              className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus className="w-4 h-4" />
               Add Category
@@ -113,6 +123,30 @@ const CategoryManagement: React.FC<CategoryManagementProps> = () => {
 
         {/* Content */}
         <div className="p-6">
+          {/* Error Alert */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-red-800 font-medium">Error</p>
+                <p className="text-red-600 text-sm">{error}</p>
+              </div>
+              <button
+                onClick={clearError}
+                className="p-1 text-red-500 hover:text-red-700 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Loading State */}
+          {loading && (
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-center gap-3">
+              <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+              <p className="text-blue-800 font-medium">Processing...</p>
+            </div>
+          )}
           {/* Add New Category Form */}
           {isAddingCategory && (
             <div className="mb-6 p-6 bg-gray-50 rounded-xl border border-gray-200">
@@ -162,14 +196,16 @@ const CategoryManagement: React.FC<CategoryManagementProps> = () => {
               <div className="flex gap-3">
                 <button
                   onClick={handleAddCategory}
-                  className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl font-medium hover:bg-gray-800 transition-colors"
+                  disabled={loading || !newCategory.name.trim()}
+                  className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Save className="w-4 h-4" />
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Save Category
                 </button>
                 <button
                   onClick={handleCancelEdit}
-                  className="px-4 py-2 border border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors"
+                  disabled={loading}
+                  className="px-4 py-2 border border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
@@ -226,14 +262,16 @@ const CategoryManagement: React.FC<CategoryManagementProps> = () => {
               <div className="flex gap-3">
                 <button
                   onClick={handleUpdateCategory}
-                  className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl font-medium hover:bg-gray-800 transition-colors"
+                  disabled={loading || !newCategory.name.trim()}
+                  className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Save className="w-4 h-4" />
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Update Category
                 </button>
                 <button
                   onClick={handleCancelEdit}
-                  className="px-4 py-2 border border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors"
+                  disabled={loading}
+                  className="px-4 py-2 border border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
@@ -245,7 +283,7 @@ const CategoryManagement: React.FC<CategoryManagementProps> = () => {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {categories.map((category) => (
               <div
-                key={category.id}
+                key={category._id}
                 className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all duration-200"
               >
                 <div className="flex items-start justify-between mb-3">
@@ -259,13 +297,15 @@ const CategoryManagement: React.FC<CategoryManagementProps> = () => {
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => handleEditCategory(category)}
-                      className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                      disabled={loading}
+                      className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Edit3 className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleDeleteCategory(category.id)}
-                      className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      onClick={() => handleDeleteCategory(category._id)}
+                      disabled={loading}
+                      className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

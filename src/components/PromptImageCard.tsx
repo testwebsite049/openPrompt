@@ -1,10 +1,12 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Copy, Check, Heart, Share2, Maximize2, Bookmark, Eye, Download, Tag, Star } from 'lucide-react';
-import { Prompt } from '../data/promptsData';
+import { Prompt } from '../hooks/usePrompts';
 import { useInView } from '../hooks/useInView';
 import { cn } from '../utils/cn';
 import AspectRatio from './AspectRatio';
 import PromptDetailModal from './PromptDetailModal';
+import ShareModal from './ShareModal';
+import { usePrompts } from '../hooks/usePrompts';
 
 interface PromptImageCardProps {
   prompt: Prompt;
@@ -21,16 +23,65 @@ const PromptImageCard: React.FC<PromptImageCardProps> = ({ prompt, index, viewMo
   const [isFavorited, setIsFavorited] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [viewCount] = useState(Math.floor(Math.random() * 1000) + 100);
+  const [showShareModal, setShowShareModal] = useState(false);
+  
+  // Get functions from usePrompts hook for tracking and interactions
+  const { incrementDownload, toggleLike, sharePrompt, hasUserLiked, hasUserShared } = usePrompts();
+  
+  // Check if user has liked this prompt
+  const isLiked = hasUserLiked(prompt._id);
+  const hasShared = hasUserShared(prompt._id);
+  
+  // Load like status on component mount
+  useEffect(() => {
+    // Like status is managed by the usePrompts hook
+  }, [prompt._id]);
 
   const handleCopyPrompt = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      await navigator.clipboard.writeText(prompt.prompt);
+      await navigator.clipboard.writeText(prompt.description);
       setCopySuccess(true);
       setTimeout(() => setCopySuccess(false), 2000);
     } catch (err) {
       console.error('Failed to copy prompt:', err);
+    }
+  };
+
+  // Handle opening modal - let modal handle view tracking
+  const handleOpenModal = () => {
+    setShowDetailModal(true);
+  };
+
+  // Handle download with download tracking
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    try {
+      // Track download count
+      await incrementDownload(prompt._id);
+      
+      // Create and download the file
+      const element = document.createElement('a');
+      const file = new Blob([prompt.description], { type: 'text/plain' });
+      element.href = URL.createObjectURL(file);
+      element.download = `${prompt.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.txt`;
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
+    } catch (err) {
+      console.error('Failed to download prompt:', err);
+    }
+  };
+
+  // Handle like with proper toggle functionality
+  const handleLike = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await toggleLike(prompt._id);
+      console.log(`Prompt ${isLiked ? 'unliked' : 'liked'} successfully`);
+    } catch (err) {
+      console.error('Failed to toggle like:', err);
     }
   };
 
@@ -46,16 +97,20 @@ const PromptImageCard: React.FC<PromptImageCardProps> = ({ prompt, index, viewMo
 
   const handleShare = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (navigator.share) {
-      navigator.share({
-        title: prompt.title,
-        text: prompt.prompt,
-        url: window.location.href
-      });
+    setShowShareModal(true);
+  };
+  
+  const handleSharePrompt = async (shareType: string) => {
+    try {
+      return await sharePrompt(prompt._id, shareType);
+    } catch (err) {
+      console.error('Failed to share prompt:', err);
+      throw err;
     }
   };
 
-  const aspectRatio = prompt.isPortrait ? 9/16 : 16/9;
+  // Determine aspect ratio based on image dimensions or default to landscape
+  const aspectRatio = 16/9; // Default to landscape since we don't have isPortrait in API
 
   if (viewMode === 'list') {
     return (
@@ -70,7 +125,7 @@ const PromptImageCard: React.FC<PromptImageCardProps> = ({ prompt, index, viewMo
           <div className="w-32 h-32 flex-shrink-0">
             <img
               alt={prompt.title}
-              src={prompt.image_url}
+              src={prompt.imageUrl || '/placeholder-image.jpg'}
               className="w-full h-full object-cover rounded-xl"
               onLoad={() => setIsLoading(false)}
               loading="lazy"
@@ -84,15 +139,15 @@ const PromptImageCard: React.FC<PromptImageCardProps> = ({ prompt, index, viewMo
                 <h3 className="text-xl font-bold text-gray-900 mb-2">{prompt.title}</h3>
                 <div className="flex items-center gap-4 text-sm text-gray-500">
                   <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
-                    {prompt.category}
+                    {typeof prompt.category === 'object' ? prompt.category.name : prompt.category}
                   </span>
                   <div className="flex items-center gap-1">
                     <Star className="w-4 h-4 text-yellow-500" />
-                    <span>{prompt.popularity}</span>
+                    <span>{prompt.likes}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <Eye className="w-4 h-4" />
-                    <span>{viewCount}</span>
+                    <span>{prompt.views}</span>
                   </div>
                 </div>
               </div>
@@ -100,14 +155,20 @@ const PromptImageCard: React.FC<PromptImageCardProps> = ({ prompt, index, viewMo
               {/* Actions */}
               <div className="flex items-center gap-2">
                 <button
-                  onClick={handleFavorite}
-                  className={`p-2 rounded-full transition-colors ${isFavorited ? 'text-red-500 bg-red-50' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
+                  onClick={handleLike}
+                  className={cn(
+                    "p-2 rounded-full transition-colors",
+                    isLiked ? 'text-red-500 bg-red-50' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
+                  )}
                 >
-                  <Heart className="w-5 h-5" fill={isFavorited ? 'currentColor' : 'none'} />
+                  <Heart className="w-5 h-5" fill={isLiked ? 'currentColor' : 'none'} />
                 </button>
                 <button
                   onClick={handleBookmark}
-                  className={`p-2 rounded-full transition-colors ${isBookmarked ? 'text-blue-500 bg-blue-50' : 'text-gray-400 hover:text-blue-500 hover:bg-blue-50'}`}
+                  className={cn(
+                    "p-2 rounded-full transition-colors",
+                    isBookmarked ? 'text-blue-500 bg-blue-50' : 'text-gray-400 hover:text-blue-500 hover:bg-blue-50'
+                  )}
                 >
                   <Bookmark className="w-5 h-5" fill={isBookmarked ? 'currentColor' : 'none'} />
                 </button>
@@ -120,7 +181,7 @@ const PromptImageCard: React.FC<PromptImageCardProps> = ({ prompt, index, viewMo
               </div>
             </div>
             
-            <p className="text-gray-600 mb-4 line-clamp-2">{prompt.prompt}</p>
+            <p className="text-gray-600 mb-4 line-clamp-2">{prompt.description}</p>
             
             {/* Tags */}
             <div className="flex flex-wrap gap-2 mb-4">
@@ -164,6 +225,7 @@ const PromptImageCard: React.FC<PromptImageCardProps> = ({ prompt, index, viewMo
       className="relative group cursor-pointer"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onClick={handleOpenModal}
     >
       <AspectRatio
         ratio={viewMode === 'grid' ? 1 : aspectRatio}
@@ -172,7 +234,7 @@ const PromptImageCard: React.FC<PromptImageCardProps> = ({ prompt, index, viewMo
         {/* Main Image */}
         <img
           alt={prompt.title}
-          src={prompt.image_url}
+          src={prompt.imageUrl || '/placeholder-image.jpg'}
           className={cn(
             'w-full h-full object-cover transition-all duration-700 ease-in-out',
             {
@@ -193,39 +255,46 @@ const PromptImageCard: React.FC<PromptImageCardProps> = ({ prompt, index, viewMo
           {/* Category & Stats */}
           <div className="flex items-center gap-2">
             <span className="px-3 py-1 bg-white/90 backdrop-blur-sm rounded-full text-xs font-bold text-gray-800 border border-white/50">
-              {prompt.category}
+              {typeof prompt.category === 'object' ? prompt.category.name : prompt.category}
             </span>
             <div className="flex items-center gap-1 px-2 py-1 bg-white/90 backdrop-blur-sm rounded-full border border-white/50">
               <Star className="w-3 h-3 text-yellow-500" />
-              <span className="text-xs font-bold text-gray-800">{prompt.popularity}</span>
+              <span className="text-xs font-bold text-gray-800">{prompt.likes}</span>
             </div>
           </div>
           
           {/* Quick Actions */}
           <div className="flex items-center gap-1">
             <button
-              onClick={handleFavorite}
-              className={`p-2 rounded-full backdrop-blur-sm border border-white/50 transition-all duration-200 ${
-                isFavorited 
+              onClick={handleLike}
+              className={cn(
+                "p-2 rounded-full backdrop-blur-sm border border-white/50 transition-all duration-200",
+                isLiked 
                   ? 'bg-red-500 text-white' 
                   : 'bg-white/90 text-gray-700 hover:bg-red-500 hover:text-white'
-              }`}
+              )}
             >
-              <Heart className="w-4 h-4" fill={isFavorited ? 'currentColor' : 'none'} />
+              <Heart className="w-4 h-4" fill={isLiked ? 'currentColor' : 'none'} />
             </button>
             <button
               onClick={handleBookmark}
-              className={`p-2 rounded-full backdrop-blur-sm border border-white/50 transition-all duration-200 ${
+              className={cn(
+                "p-2 rounded-full backdrop-blur-sm border border-white/50 transition-all duration-200",
                 isBookmarked 
                   ? 'bg-blue-500 text-white' 
                   : 'bg-white/90 text-gray-700 hover:bg-blue-500 hover:text-white'
-              }`}
+              )}
             >
               <Bookmark className="w-4 h-4" fill={isBookmarked ? 'currentColor' : 'none'} />
             </button>
             <button
               onClick={handleShare}
-              className="p-2 rounded-full bg-white/90 backdrop-blur-sm text-gray-700 hover:bg-purple-500 hover:text-white transition-all duration-200 border border-white/50"
+              className={cn(
+                "p-2 rounded-full backdrop-blur-sm border border-white/50 transition-all duration-200",
+                hasShared 
+                  ? 'bg-purple-500 text-white' 
+                  : 'bg-white/90 text-gray-700 hover:bg-purple-500 hover:text-white'
+              )}
             >
               <Share2 className="w-4 h-4" />
             </button>
@@ -249,7 +318,7 @@ const PromptImageCard: React.FC<PromptImageCardProps> = ({ prompt, index, viewMo
             
             {/* Prompt Text */}
             <p className="text-white/90 text-sm leading-relaxed mb-4 line-clamp-3 font-mono bg-black/20 rounded-lg p-3 backdrop-blur-sm">
-              "{prompt.prompt}"
+              "{prompt.description}"
             </p>
             
             {/* Tags */}
@@ -291,26 +360,37 @@ const PromptImageCard: React.FC<PromptImageCardProps> = ({ prompt, index, viewMo
               </button>
               
               <button className="p-3 bg-white/20 backdrop-blur-sm text-white border-2 border-white/30 rounded-xl hover:bg-white/30 transition-all duration-200 hover:scale-110"
-                onClick={() => setShowDetailModal(true)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenModal(); // Use consistent modal opening
+                }}
               >
                 <Maximize2 className="w-4 h-4" />
               </button>
             </div>
             
-            {/* View Stats */}
+            {/* View Stats - use real data */}
             <div className="flex items-center justify-between mt-3 text-xs text-white/70">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1">
                   <Eye className="w-3 h-3" />
-                  <span>{viewCount}</span>
+                  <span>{prompt.views}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <Download className="w-3 h-3" />
-                  <span>{Math.floor(viewCount * 0.3)}</span>
+                  <span>{prompt.downloads}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Heart className="w-3 h-3" />
+                  <span>{prompt.likes}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Share2 className="w-3 h-3" />
+                  <span>{prompt.shares || 0}</span>
                 </div>
               </div>
               <div className="text-xs text-white/50">
-                #{prompt.id.toString().padStart(4, '0')}
+                #{prompt._id.slice(-4)}
               </div>
             </div>
           </div>
@@ -323,19 +403,27 @@ const PromptImageCard: React.FC<PromptImageCardProps> = ({ prompt, index, viewMo
           </div>
         )}
         
-        {/* Popularity Indicator */}
-        {prompt.popularity > 90 && (
+        {/* Featured Indicator */}
+        {prompt.featured && (
           <div className="absolute top-2 right-2 bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg animate-pulse">
-            🔥 HOT
+            🔥 FEATURED
           </div>
         )}
       </AspectRatio>
       
-      {/* Detail Modal */}
+      {/* Detail Modal - handles its own view tracking */}
       <PromptDetailModal 
         prompt={prompt}
         isOpen={showDetailModal}
         onClose={() => setShowDetailModal(false)}
+      />
+      
+      {/* Share Modal */}
+      <ShareModal 
+        prompt={prompt}
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        onShare={handleSharePrompt}
       />
     </div>
   );

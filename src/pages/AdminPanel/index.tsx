@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAdminPrompts } from '../../hooks/useAdminPrompts';
+import { useAuth } from '../../context/AuthContext';
 import LoginForm from './LoginForm';
 import Sidebar from './Sidebar';
 import Header from './Header';
@@ -12,9 +13,9 @@ import CronJobs from './CronJobs';
 export type ActiveTab = 'dashboard' | 'upload' | 'manage' | 'categories' | 'cron';
 
 const AdminPanel: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { isAuthenticated, logout } = useAuth();
   
   // Use admin prompts hook
   const adminPromptsHook = useAdminPrompts();
@@ -22,7 +23,7 @@ const AdminPanel: React.FC = () => {
   if (!isAuthenticated) {
     return (
       <LoginForm 
-        onLogin={() => setIsAuthenticated(true)}
+        onLogin={() => {}} // The AuthContext handles the state
       />
     );
   }
@@ -34,7 +35,7 @@ const AdminPanel: React.FC = () => {
         setActiveTab={setActiveTab}
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
-        onLogout={() => setIsAuthenticated(false)}
+        onLogout={logout}
       />
 
       {/* Overlay for mobile */}
@@ -71,6 +72,8 @@ const AdminPanel: React.FC = () => {
               uploadedPrompts={adminPromptsHook.uploadedPrompts}
               deletePrompt={adminPromptsHook.deletePrompt}
               updatePrompt={adminPromptsHook.updatePrompt}
+              loading={adminPromptsHook.loading}
+              error={adminPromptsHook.error}
             />
           )}
 
