@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { getApiUrl, debugLog, errorLog } from '../utils/config';
 
 interface Prompt {
   _id: string;
@@ -66,7 +67,7 @@ export const useAdminPrompts = () => {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(getApiUrl(endpoint), {
       ...options,
       headers: {
         ...(token && { Authorization: `Bearer ${token}` }),

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { getApiUrl, debugLog, errorLog } from '../utils/config';
 
 interface AuthUser {
   _id: string;
@@ -24,7 +25,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_BASE_URL = 'http://localhost:5000/api';
+
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -57,7 +58,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setError(null);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/admin-login`, {
+      const response = await fetch(getApiUrl('/auth/admin-login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),

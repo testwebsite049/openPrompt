@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { getApiUrl, debugLog, errorLog } from '../utils/config';
 
 interface Category {
   _id: string;
@@ -37,7 +38,7 @@ interface ApiResponse<T> {
   };
 }
 
-const API_BASE_URL = 'http://localhost:5000/api';
+
 
 export const useAdminCategories = () => {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -50,7 +51,7 @@ export const useAdminCategories = () => {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(getApiUrl(endpoint), {
       ...options,
       headers: {
         'Content-Type': 'application/json',
