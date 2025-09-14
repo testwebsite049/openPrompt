@@ -42,18 +42,26 @@ const Header: React.FC = () => {
             >
               Explore
             </Link>
-            <a
-              href="#about"
-              className="text-sm font-medium text-gray-600 hover:text-black transition-colors duration-200"
+            <Link
+              to="/about"
+              className={`text-sm font-medium transition-colors duration-200 ${
+                location.pathname === '/about'
+                  ? 'text-black'
+                  : 'text-gray-600 hover:text-black'
+              }`}
             >
               About
-            </a>
-            <a
-              href="#contact"
-              className="text-sm font-medium text-gray-600 hover:text-black transition-colors duration-200"
+            </Link>
+            <Link
+              to="/contact"
+              className={`text-sm font-medium transition-colors duration-200 ${
+                location.pathname === '/contact'
+                  ? 'text-black'
+                  : 'text-gray-600 hover:text-black'
+              }`}
             >
               Contact
-            </a>
+            </Link>
           </nav>
 
           {/* CTA Button */}
